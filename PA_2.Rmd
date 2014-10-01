@@ -1,0 +1,176 @@
+---
+title: "Health and economic impact of weather events in the US from 1950 to 2011"
+output: html_document
+---
+
+## Synopsis
+Severe and extreme weather events such as storms, floods and tornados can result in fatalities, injuries and economic losses. Using data form the US National Oceanic and Atmospheric Administration's - NOAA - it is possible to categorize these extreme events in order to analyze them, quantify their costs and explore their evolution over time. This report categorizes the impact of major weather events in the United States from 1950 to 2011.
+
+## Data processing
+The full data set is available [here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2). It includes 902,297 observations on 37 variables. However, not all of them are required for the purpose of this analysis, therefore a new data frame will be created containing the 8 variables needed. Within this new data set a new variable will be created using the date of the original event to display only the year.
+```{r read data}
+# Read in data
+storm_data <- read.csv("repdata_data_StormData.csv.bz2", stringsAsFactors = FALSE)
+# Set all variable names to lower caps
+names(storm_data) <- tolower(names(storm_data))
+```
+
+
+```{r new data frame}
+# Create a new data frame using only the variables needed
+data <- subset(storm_data, select=c("bgn_date", "evtype", "fatalities", "injuries",
+                                    "propdmg", "propdmgexp", "cropdmg", "cropdmgexp"))
+
+# Extract the year to another variable
+data$year <- as.numeric(substr(strptime(storm_data$bgn_date, "%m/%d/%Y"), 0, 4))
+```
+
+There are 985 different categories of event types in the data set. However, after looking at their values it becomes clear that they can be regrouped into smaller groups. This is due to the fact that the categorization of events does not follow a strict system. There are clarifications, abbreviations and typos that capture the same event, for example thunderstorms are referred to as "THUNDERSTORMS", "GUSTY THUNDERSTORM WIND" and "TSTM". To reduce the number of categories regular expressions can be used first to determine key words associated with different events and second to rename the event type field.  
+
+For example, keywords like "rain", "storm" and "shower" can be used to determine a storm event that can be renamed simply "Rain" in all cases. Likewise, occurrences of the strings "flood", "flooo", "fld" and "stream" can be renamed simply "Flood".
+
+After examining the different event types collected we can re-assigned them to one of 8 groups that correspond to the most common event types, while those that did not correspond to any of the new created categories where assigned to "Other". This results in an oversimplification of facts but it is necessary to provide an initial overall understanding that could be later expanded by analzying specific cases alone.
+```{r regrouping event types}
+thunderstorm <- grepl("thunder|thude|tstm", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(thunderstorm == TRUE, "Thunderstorm", data$evtype)
+
+flood <- grepl("flood|flooo|fld|stream", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(flood == TRUE, "Flood", data$evtype)
+
+tornado <- grepl("tornado|torndao", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(tornado == TRUE, "Tornado", data$evtype)
+
+rain <- grepl("rain|storm|shower", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(rain == TRUE, "Rain", data$evtype)
+
+wind <- grepl("wind|gust|hurr|typ", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(wind == TRUE, "Wind", data$evtype)
+
+heat <- grepl("heat|warm|hot|dry|drought|high", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(heat == TRUE, "Hot weather", data$evtype)
+
+cold <- grepl("cold|chill|freez|ice|icy|snow|wint|blizzard|cool|frost|low", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(cold == TRUE, "Cold weather", data$evtype)
+
+fire <- grepl("fire|smoke", ignore.case = TRUE, data$evtype)
+data$evtype <- ifelse(fire == TRUE, "Fire", data$evtype)
+
+# Group all other events into 'other'
+clean_events <- c("Thunderstorm", "Flood", "Tornado", "Rain", "Wind","Hot weather", "Cold weather", "Fire")
+data$evtype <-ifelse(data$evtype %in% clean_events, data$evtype, "Other")
+```
+
+While fatalities and injuries have been entered using actual figures, property and crop damages must be converted to their actual figure using the variable 'propdmgexp' and 'cropdmgexp' respectively. These variables consist, except in a few cases that will be overlooked here, of a string character that determines whether the figure provided corresponds to hundreds, "H", thousands, "K", millions, "M" or billions, "B". Combining these we can get the actual property and damage figures, as well as create a variable that sums them together, "total_losses".
+```{r totalling property and crops damages}
+# Property and crops damage totals
+data$prop_total_damage <- ifelse(data$propdmgexp=="H"|data$propdmgexp=="h", data$propdmg * 100,
+                                 ifelse(data$propdmgexp=="K", data$propdmg * 1000,
+                                        ifelse(data$propdmgexp=="M"|data$propdmgexp=="m", data$propdmg * 1000000,
+                                               ifelse(data$propdmgexp=="B", data$propdmg * 1000000000, data$propdmg))))
+
+data$crop_total_damage <- ifelse(data$cropdmgexp=="k", data$cropdmg * 1000,
+                                 ifelse(data$cropdmgexp=="K", data$cropdmg * 1000,
+                                        ifelse(data$cropdmgexp=="M", data$cropdmg * 1000000,
+                                               ifelse(data$cropdmgexp=="m", data$cropdmg * 1000000, data$cropdmg))))
+
+data$total_losses <- data$prop_total_damage + data$crop_total_damage
+```
+
+We can then proceed to create to grouped sets of data, one by event type and year and another one only by event types.
+```{r grouping variables}
+library(dplyr)
+evtype_year_groups <- group_by(data, year, evtype)
+
+evtype_year_data <- summarise(evtype_year_groups,
+                          n = n())
+
+evtype_groups <- group_by(data, evtype)
+
+evtype_data <- summarise(evtype_groups,
+                          fatalities = sum(fatalities),
+                          injuries = sum(injuries),
+                          propdmg = sum(prop_total_damage),
+                          cropdmg = sum(crop_total_damage),
+                          totaldmg = sum(total_losses),
+                          n = n())
+```
+
+## Results
+
+### Most harmful events to population health
+Tornados are by far the most dangerous weather events in the US. In the 60,700 tornados registered from 1950 until 2011 91,407 people have been injured and 5636 have died. 65% of all injuries caused by weather events are the result of tornados, while the next major cause of injuries, rain, represents only 10%. In terms of fatalities, however, tornados represent 37.2% of deaths, followed by 22% caused by hot weather.
+
+```{r population health, fig.align='center', fig.width=10, fig.height=3.5}
+# Factor the event type variable and arrange the levels.
+evtype_data$evtype <- factor(evtype_data$evtype, levels = c("Other", "Fire","Wind",
+                                                            "Cold weather", "Flood", "Hot weather",
+                                                            "Rain", "Tornado"))
+
+library(ggplot2)
+library(gridExtra)
+injuries = ggplot(evtype_data, aes(x=evtype, y=injuries)) +
+        geom_bar(stat="identity", fill="#45b188") +
+        coord_flip() +
+        ylab("") +
+        xlab("") +
+        ggtitle("Injuries")
+
+fatalities = ggplot(evtype_data, aes(x=evtype, y=fatalities)) +
+        geom_bar(stat="identity", fill="steelblue") +
+        coord_flip() +
+        ylab("") +
+        xlab("") +
+        ggtitle("Fatalities")
+
+grid.arrange(injuries, fatalities, ncol=2, main = "Total number of people affected 1950 - 2011")
+```
+
+
+### Economic consequences of weather events
+In economic terms floods have been the major cause of losses from 1950 to 2011. 86,136 floods have been reported in the period 1950 to 2011 and while they have caused damages in the crops valued in 7,4 billion dollars, the resulting property damages reach 167 billion dollars. 37.8% of all economic losses are caused by floods, while 20.8% have been caused by wind, including hurricanes and typhoons. Rains, which are a major cause of floods have caused around 18.4% of all economic losses.
+```{r economic consequences, fig.width=15, fig.height=10}
+# Factor the event type variable and arrange the levels.
+evtype_data$evtype <- factor(evtype_data$evtype, levels = c("Other", "Cold weather", "Fire", "Hot weather", "Tornado",
+                                                            "Rain", "Wind", "Flood"))
+
+property = ggplot(evtype_data, aes(x=evtype, y=propdmg/1000000000)) +
+        geom_bar(stat="identity", fill="#45b188") +
+        coord_flip() +
+        ylab("Billion dollars") +
+        xlab("") +
+        ggtitle("Property damages")
+
+crops = ggplot(evtype_data, aes(x=evtype, y=cropdmg/1000000000)) +
+        geom_bar(stat="identity", fill="steelblue") +
+        coord_flip() +
+        ylab("Billion dollars") +
+        xlab("") +
+        ggtitle("Crop damages")
+
+total = ggplot(evtype_data, aes(x=evtype, y=totaldmg/1000000000)) +
+        geom_bar(stat="identity", fill="#224158") +
+        coord_flip() +
+        ylab("Billion dollars") +
+        xlab("") +
+        ggtitle("Total damages")
+
+# Print several plots thanks to 'A guest': http://pastebin.com/skwdmEjZ
+pushViewport(viewport(layout = grid.layout(3, 2, heights = unit(c(0.5, 5, 5), "null"))))
+
+print(property, vp = viewport(layout.pos.row = 2, layout.pos.col = 1))
+print(crops, vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
+print(total, vp = viewport(layout.pos.row = 3, layout.pos.col = 1:2))
+grid.text("Economic costs of weather events 1950 - 2011", vp = viewport(layout.pos.row = 1, layout.pos.col = 1:2))
+```
+
+### Event frequency
+Although not all weather events have been registered since 1950 it is very noticeable the increase in rain, floods and wind type of events in the past twenty years. Tornados display a much more stable pattern, although they also seem to increase in the latest years along with cold weather.
+```{r event frequency, fig.width=10, fig.height=5}
+ggplot(evtype_year_data, aes(x=year, y=n, color=evtype)) +
+        geom_line() +
+        scale_colour_brewer(palette="Set1") +
+        xlab("Year") +
+        ylab("Occurrences") +
+        ggtitle("Evolution of weather events 1950 - 2011") +
+        scale_x_continuous(breaks=seq(1950, 2011, 5))
+```
