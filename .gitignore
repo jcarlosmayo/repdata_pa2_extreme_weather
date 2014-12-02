@@ -1,6 +1,14 @@
 # History files
 .Rhistory
 
+# OSX related files
+.DS_Store
+
+# Cached and knitted files
+PA_2_cache/
+PA_2_files/
+
+
 # Example code in package build process
 *-Ex.R
 
@@ -9,3 +17,8 @@
 
 # RStudio files
 .Rproj.user/
+.Rproj.user
+
+# Actual data
+.csv
+.bz2
