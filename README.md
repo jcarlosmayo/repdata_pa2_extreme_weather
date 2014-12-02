@@ -9,4 +9,4 @@ The [Reproducible Research](https://www.coursera.org/course/repdata) course offe
 - Across the United States, which types of events have the greatest economic consequences?
 
 
-The analysis is also available in [RPubs](http://rpubs.com/jcarlosmayo/repdata_pa2).
+The analysis is also available in [RPubs](http://rpubs.com/jcarlosmayo/repdata_extreme_weather_us).
